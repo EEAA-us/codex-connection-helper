@@ -9,6 +9,17 @@ using System.Web.Script.Serialization;
 
 // Supported app-server RPC only. Never loads chat bodies, prints responses or refreshes tokens.
 public sealed class CodexNativeProbe : IDisposable {
+    static readonly object inputEncodingLock=new object();
+    static Process StartUtf8Process(ProcessStartInfo start) {
+        // .NET Framework has no ProcessStartInfo.StandardInputEncoding.
+        // Process.Start creates an AutoFlush writer using Console.InputEncoding;
+        // with a UTF-8 BOM console it emits a preamble before our writer exists.
+        lock(inputEncodingLock) {
+            var previous=Console.InputEncoding;
+            try { Console.InputEncoding=new UTF8Encoding(false);return Process.Start(start); }
+            finally { Console.InputEncoding=previous; }
+        }
+    }
     Process process;
     StreamWriter input;
     readonly CancellationTokenSource cancel=new CancellationTokenSource();
@@ -26,7 +37,7 @@ public sealed class CodexNativeProbe : IDisposable {
         var psi=new ProcessStartInfo(engine,"app-server --stdio"){UseShellExecute=false,CreateNoWindow=true,RedirectStandardInput=true,RedirectStandardOutput=true,RedirectStandardError=true,StandardOutputEncoding=Encoding.UTF8,StandardErrorEncoding=Encoding.UTF8,WorkingDirectory=cwd};
         foreach(var name in new[]{"OPENAI_API_KEY","CODEX_API_KEY","OPENAI_BASE_URL","CODEX_HOME","CODEX_ELECTRON_USER_DATA_PATH"})psi.EnvironmentVariables.Remove(name);
         psi.EnvironmentVariables["CODEX_HOME"]=home;psi.EnvironmentVariables["CODEX_ELECTRON_USER_DATA_PATH"]=ui;
-        process=Process.Start(psi);
+        process=StartUtf8Process(psi);
         // Windows PowerShell 5.1's default pipe writer follows the system code page.
         // Rust app-server expects UTF-8, including Chinese cwd and marketplace paths.
         input=new StreamWriter(process.StandardInput.BaseStream,new UTF8Encoding(false)){AutoFlush=true};

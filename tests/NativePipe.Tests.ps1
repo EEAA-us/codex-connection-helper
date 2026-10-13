@@ -46,16 +46,23 @@ Add-Type -TypeDefinition $probeCode -ReferencedAssemblies 'System','System.Core'
 $project=Join-Path $fixture '项目 中文 空格';New-Item -ItemType Directory -Path $project|Out-Null
 $catalog=Join-Path $fixture '图片与设计/市场.json'
 $repair=@{pluginName='design-partner';marketplacePath=$catalog;launcherExpectedMode='api'}|ConvertTo-Json -Compress
-foreach($plan in @('',$repair)){
+$originalConsoleEncoding=[Console]::InputEncoding
+try{
+foreach($consoleEncoding in @($originalConsoleEncoding,[Text.UTF8Encoding]::new($true),[Text.UTF8Encoding]::new($false))){
+ [Console]::InputEncoding=$consoleEncoding
+ foreach($plan in @('',$repair)){
     $probe=[CodexNativeProbe]::new()
     try{$raw=$probe.RunAsync($engine,$fixture,$fixture,$project,$plan).GetAwaiter().GetResult()|ConvertFrom-Json}catch{throw ('Native fixture failed at '+$probe.Stage+': '+$_.Exception.GetBaseException().Message)}finally{$probe.Dispose()}
     if($raw.plugins.observedCwd -cne $project -or $raw.skills.observedCwd -cne $project){throw 'Unicode project path changed in native pipe'}
     if($plan -and $raw.repair.observedCatalog -cne $catalog){throw 'Unicode marketplace path changed in native pipe'}
+    if([Console]::InputEncoding.CodePage -ne $consoleEncoding.CodePage -or [Console]::InputEncoding.GetPreamble().Length -ne $consoleEncoding.GetPreamble().Length){throw 'Native process start changed caller console encoding'}
+ }
 }
+}finally{[Console]::InputEncoding=$originalConsoleEncoding}
 [IO.File]::WriteAllText((Join-Path $project 'plugins-only.flag'),'synthetic')
 $probe=[CodexNativeProbe]::new()
 try{$raw=$probe.RunPluginsAsync($engine,$fixture,$fixture,$project,'').GetAwaiter().GetResult()|ConvertFrom-Json}finally{$probe.Dispose()}
 if($raw.plugins.observedCwd -cne $project -or $raw.skills.observedCwd -cne $project -or $raw.PSObject.Properties['mcp'] -or $raw.PSObject.Properties['apps']){throw 'Plugin source query depended on optional connections'}
-$result=[ordered]@{status='pass';powershell=$PSVersionTable.PSVersion.ToString();fixture=$fixture;strictUtf8Decoder='pass';unicodeCwd='pass';unicodeMarketplace='pass';queryAndInstall='pass';realNativeDesktop='unobserved'}
+$result=[ordered]@{status='pass';powershell=$PSVersionTable.PSVersion.ToString();fixture=$fixture;strictUtf8Decoder='pass';consoleUtf8BomAndNoBom='pass';callerEncodingPreserved='pass';unicodeCwd='pass';unicodeMarketplace='pass';queryAndInstall='pass';realNativeDesktop='unobserved'}
 if($ReportPath){[IO.File]::WriteAllText([IO.Path]::GetFullPath($ReportPath),($result|ConvertTo-Json),[Text.UTF8Encoding]::new($false))}
-'PASS: UTF-8 native stdin; exact Chinese/space cwd and marketplace roundtrip, query and install.'
+'PASS: UTF-8 native stdin without BOM; default/UTF-8 BOM/no-BOM consoles; caller encoding restored; exact Chinese/space cwd and marketplace roundtrip, query and install.'

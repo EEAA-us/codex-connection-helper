@@ -30,7 +30,7 @@ GitHub Actions 使用 Windows runner 验证 PowerShell 语法、XAML XML 及路�
 
 提 issue 时附启动器版本、Windows/Codex 版本、安装方式、简化后的路径结构和错误提示。密钥、auth.json、聊天、恢复备份及整个 AppData 数据目录不应附入 issue。
 
-公开仓库为 https://github.com/EEAA-us/codex-connection-helper ，版本发布使用 Git 标签和 GitHub Releases。当前 0.3.16 为预发布测试版；代码许可证尚未指定，不将字体 OFL 或品牌资源说明当作代码许可。图案来源见 NOTICE.md。
+公开仓库为 https://github.com/EEAA-us/codex-connection-helper ，版本发布使用 Git 标签和 GitHub Releases。当前 0.3.17 为预发布测试版；代码许可证尚未指定，不将字体 OFL 或品牌资源说明当作代码许可。图案来源见 NOTICE.md。
 
 `tests/ImageTools.Tests.ps1` 在本机合成接口检查同步/base64/URL、异步队列、改图、取消后续取且不重交、错误脱敏、同源凭据引用/跨源隔离、官方恢复及真实 MCP 子进程握手。生产代码不开放测试用 HTTP 开关。CI 不运行付费生图或真实桌面会话。
 

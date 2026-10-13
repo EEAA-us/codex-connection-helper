@@ -207,21 +207,25 @@ $process=[Diagnostics.Process]::new();$process.StartInfo=[Diagnostics.ProcessSta
 $process.StartInfo.FileName=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $process.StartInfo.Arguments='-NoProfile -ExecutionPolicy Bypass -File "'+(Join-Path $source 'ImageMcp.ps1')+'" -RuntimePath "'+$state.image_runtime_path+'"'
 $process.StartInfo.UseShellExecute=$false;$process.StartInfo.CreateNoWindow=$true;$process.StartInfo.RedirectStandardInput=$true;$process.StartInfo.RedirectStandardOutput=$true;$process.StartInfo.RedirectStandardError=$true
+$process.StartInfo.StandardOutputEncoding=[Text.UTF8Encoding]::new($false);$process.StartInfo.StandardErrorEncoding=[Text.UTF8Encoding]::new($false)
+$mcpInput=$null
 try{
-    if(-not $process.Start()){throw 'MCP did not start'}
+    $previousInputEncoding=[Console]::InputEncoding
+    try{[Console]::InputEncoding=[Text.UTF8Encoding]::new($false);if(-not $process.Start()){throw 'MCP did not start'}}finally{[Console]::InputEncoding=$previousInputEncoding}
+    $mcpInput=[IO.StreamWriter]::new($process.StandardInput.BaseStream,[Text.UTF8Encoding]::new($false));$mcpInput.AutoFlush=$true
     $read=$process.StandardOutput.ReadToEndAsync();$errors=$process.StandardError.ReadToEndAsync()
     foreach($message in @(
         @{jsonrpc='2.0';id=1;method='initialize';params=@{protocolVersion='2025-06-18';capabilities=@{};clientInfo=@{name='isolated-test';version='1'}}},
         @{jsonrpc='2.0';method='notifications/initialized'},
         @{jsonrpc='2.0';id=2;method='tools/list'},
         @{jsonrpc='2.0';id=3;method='tools/call';params=@{name='generate_image';arguments=@{prompt='synthetic-only'}}}
-    )){$process.StandardInput.WriteLine(($message|ConvertTo-Json -Depth 12 -Compress))}
-    $process.StandardInput.Close()
+    )){$mcpInput.WriteLine(($message|ConvertTo-Json -Depth 12 -Compress))}
+    $mcpInput.Close()
     if(-not $process.WaitForExit(15000)){throw 'MCP process did not cleanly stop'}
     $output=$read.GetAwaiter().GetResult();$errorOutput=$errors.GetAwaiter().GetResult()
     if($process.ExitCode -ne 0 -or $errorOutput -or $output -match 'synthetic-separate-key'){throw ('MCP initialization failed: '+$errorOutput)}
     $messages=@($output -split '\r?\n'|Where-Object{$_}|ForEach-Object{$_|ConvertFrom-Json})
     $init=@($messages|Where-Object{$_.id -eq 1})[0];$listing=@($messages|Where-Object{$_.id -eq 2})[0];$call=@($messages|Where-Object{$_.id -eq 3})[0]
     if($init.result.protocolVersion -ne '2025-06-18' -or @($listing.result.tools).Count -ne 3 -or -not $call.result.isError -or $call.result.structuredContent.status -ne 'failed'){throw 'Real MCP handshake/list/call contract failed'}
-}finally{$process.Dispose()}
+}finally{if($mcpInput){$mcpInput.Dispose()};$process.Dispose()}
 Write-Output 'PASS: sync/base64/URL, async queue/download, edits, cancellation, resume without resubmission, safe errors, encrypted task ownership, same/cross-origin credentials, MCP apply/conflict/exact restore, official-mode guard.'

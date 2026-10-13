@@ -1,7 +1,7 @@
 ﻿function Get-DistributionFiles {
 return @(
  'Distribution.ps1','Install.ps1','DesktopEntry.cs','Build-Desktop.ps1','Launch.exe','Setup.exe','tests\Install.Tests.ps1','Launcher.Core.ps1','Launcher.Paths.ps1','Launcher.ps1','Launcher.Dialogs.ps1','Restore-Official.ps1','恢复官方配置.cmd','Environment.ps1','UI.xaml','Theme.xaml',
- 'HttpBridge.ps1','HttpBridge.cs','ApiProbe.cs','DesktopActivation.cs','Repair-Shortcut.ps1','Prepare-Share.ps1',
+ 'HttpBridge.ps1','HttpBridge.cs','ApiProbe.cs','DesktopActivation.cs','Shortcut.cs','Repair-Shortcut.ps1','Prepare-Share.ps1',
  'NativeProbe.cs','Launcher.Compatibility.ps1','Launcher.CompatibilityUI.ps1','tests\Compatibility.Tests.ps1',
  'Launcher.Images.ps1','Launcher.ImageUI.ps1','ImageTools.cs','ImageMcp.ps1',
  '打开启动器.vbs','打开启动器.cmd','修复桌面快捷方式.cmd',

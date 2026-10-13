@@ -23,8 +23,8 @@ try{
     $null=Install-LauncherFiles $seed $target
     $null=Install-LauncherFiles $seed $target
     & (Join-Path $target 'Repair-Shortcut.ps1') -DesktopDirectory $desktop|Out-Null
-    $shortcut=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $desktop 'Codex 模式切换.lnk'))
-    if($shortcut.TargetPath -ine (Join-Path $target 'Launch.exe') -or $shortcut.Arguments -or $shortcut.WorkingDirectory -ine $target){throw 'Desktop shortcut is not a direct executable entry'}
+    $shortcutPath=Join-Path $desktop 'Codex 模式切换.lnk'
+    if([CodexShortcut]::ReadTarget($shortcutPath) -ine (Join-Path $target 'Launch.exe') -or [CodexShortcut]::ReadArguments($shortcutPath) -or [CodexShortcut]::ReadWorkingDirectory($shortcutPath) -ine $target){throw 'Desktop shortcut is not a direct executable entry'}
     [IO.File]::WriteAllText((Join-Path $seed 'Launcher.ps1'),@'
 param([switch]$ValidateOnly)
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'entry-observed.txt'),[Threading.Thread]::CurrentThread.GetApartmentState().ToString())

@@ -19,14 +19,9 @@ $desktopDir = $DesktopDirectory
 if(-not $desktopDir){$desktopDir = [Environment]::GetFolderPath([Environment+SpecialFolder]::DesktopDirectory)}
 if (-not $desktopDir -or -not (Test-Path -LiteralPath $desktopDir)) { throw '未找到当前用户的桌面目录。' }
 $shortcutPath = Join-Path $desktopDir 'Codex 模式切换.lnk'
-$shell = New-Object -ComObject WScript.Shell
-$shortcut = $shell.CreateShortcut($shortcutPath)
-$shortcut.TargetPath = $launcherFile
-$shortcut.Arguments = ''
-$shortcut.WorkingDirectory = $PSScriptRoot
-$shortcut.IconLocation = $stableIcon + ',0'
-$shortcut.Description = '官方账号与第三方 API 切换，共用原来的本机记录'
-$shortcut.Save()
+if(-not ('CodexShortcut' -as [type])){Add-Type -Path (Join-Path $PSScriptRoot 'Shortcut.cs')}
+[CodexShortcut]::Create($shortcutPath,$launcherFile,$PSScriptRoot,$stableIcon)
+if([CodexShortcut]::ReadTarget($shortcutPath) -ine $launcherFile){throw '桌面入口回读不一致，请重新安装。'}
 if (-not ('CodexLauncherShortcutShell' -as [type])) {
     Add-Type -TypeDefinition @'
 using System;

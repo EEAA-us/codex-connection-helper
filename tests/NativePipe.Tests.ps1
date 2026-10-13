@@ -38,13 +38,17 @@ public static class Utf8NativeFixture {
 }
 '@
 Add-Type -TypeDefinition $code -ReferencedAssemblies 'System','System.Core','System.Web.Extensions' -OutputAssembly $engine -OutputType ConsoleApplication
-Add-Type -Path (Join-Path $source 'NativeProbe.cs') -ReferencedAssemblies 'System','System.Core','System.Web.Extensions'
+# This fixture contains no credentials. Capture bounded stderr only in the test
+# assembly so CI startup failures are diagnosable without logging production RPCs.
+$probeCode=[IO.File]::ReadAllText((Join-Path $source 'NativeProbe.cs'))
+$probeCode=$probeCode.Replace('process.ErrorDataReceived+=(s,e)=>{};', 'process.ErrorDataReceived+=(s,e)=>{if(e.Data!=null)Console.Error.WriteLine("Synthetic fixture stderr: "+e.Data.Substring(0,Math.Min(500,e.Data.Length)));};')
+Add-Type -TypeDefinition $probeCode -ReferencedAssemblies 'System','System.Core','System.Web.Extensions'
 $project=Join-Path $fixture '项目 中文 空格';New-Item -ItemType Directory -Path $project|Out-Null
 $catalog=Join-Path $fixture '图片与设计/市场.json'
 $repair=@{pluginName='design-partner';marketplacePath=$catalog;launcherExpectedMode='api'}|ConvertTo-Json -Compress
 foreach($plan in @('',$repair)){
     $probe=[CodexNativeProbe]::new()
-    try{$raw=$probe.RunAsync($engine,$fixture,$fixture,$project,$plan).GetAwaiter().GetResult()|ConvertFrom-Json}finally{$probe.Dispose()}
+    try{$raw=$probe.RunAsync($engine,$fixture,$fixture,$project,$plan).GetAwaiter().GetResult()|ConvertFrom-Json}catch{throw ('Native fixture failed at '+$probe.Stage+': '+$_.Exception.GetBaseException().Message)}finally{$probe.Dispose()}
     if($raw.plugins.observedCwd -cne $project -or $raw.skills.observedCwd -cne $project){throw 'Unicode project path changed in native pipe'}
     if($plan -and $raw.repair.observedCatalog -cne $catalog){throw 'Unicode marketplace path changed in native pipe'}
 }

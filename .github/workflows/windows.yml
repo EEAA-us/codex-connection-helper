@@ -1,0 +1,43 @@
+name: Windows checks
+on: [push, pull_request]
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate PowerShell and XAML
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
+            $tokens = $null; $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors) { throw ($_.Name + ': ' + ($errors.Message -join ', ')) }
+          }
+          [xml](Get-Content -LiteralPath UI.xaml -Raw -Encoding UTF8) | Out-Null
+          [xml](Get-Content -LiteralPath Theme.xaml -Raw -Encoding UTF8) | Out-Null
+      - name: Run isolated portability checks
+        shell: powershell
+        run: .\tests\Portability.Tests.ps1
+      - name: Check public file allowlist
+        shell: powershell
+        run: .\tests\ShareSafety.Tests.ps1
+      - name: Check official emergency recovery
+        shell: powershell
+        run: .\tests\Recovery.Tests.ps1
+      - name: Check exact production background worker
+        shell: powershell
+        run: .\tests\Workers.Tests.ps1
+      - name: Check Unicode native pipe
+        shell: powershell
+        run: .\tests\NativePipe.Tests.ps1
+      - name: Check Responses probe without real API calls
+        shell: powershell
+        run: .\tests\ApiProbe.Tests.ps1
+      - name: Check image adapters and MCP without real API calls
+        shell: powershell
+        run: .\tests\ImageTools.Tests.ps1
+
+      - name: Check plugin compatibility projections
+        shell: powershell
+        run: .\tests\Compatibility.Tests.ps1

@@ -13,9 +13,9 @@
     <TextBlock Text="桌面界面数据" FontWeight="SemiBold" Margin="0,20,0,0"/><TextBlock Text="通常保持自动；使用过自定义界面目录时选择原位置。" FontSize="13" Foreground="{StaticResource MutedInk}" Margin="0,5,0,9"/>
     <DockPanel><Button x:Name="chooseUi" DockPanel.Dock="Right" Content="选择…" Margin="9,0,0,0" Tag="ui"/><TextBox x:Name="uiPath" FontFamily="{StaticResource DataFont}" AutomationProperties.Name="界面数据目录"/></DockPanel>
    </StackPanel></Border>
-   <Border Background="{StaticResource InsetSurface}" CornerRadius="12" Padding="16,13" Margin="0,14,0,0"><StackPanel><TextBlock Text="当前实际使用的位置" Foreground="{StaticResource ActionInk}" FontWeight="SemiBold"/><TextBlock x:Name="resolvedPaths" FontSize="13" Foreground="{StaticResource MutedInk}" Margin="0,8,0,0" LineHeight="20"/></StackPanel></Border>
+   <Border Background="{StaticResource InsetSurface}" CornerRadius="12" Padding="16,13" Margin="0,14,0,0"><StackPanel><TextBlock Text="当前实际使用的位置" Foreground="{StaticResource ActionInk}" FontWeight="SemiBold"/><TextBlock x:Name="resolvedPaths" FontSize="13" Foreground="{StaticResource MutedInk}" Margin="0,8,0,0" LineHeight="20" TextWrapping="Wrap"/></StackPanel></Border>
   </StackPanel></ScrollViewer>
-  <StackPanel Grid.Row="2"><TextBlock x:Name="pathError" Foreground="{StaticResource DangerInk}" FontSize="13" Margin="0,9,0,12"/><DockPanel><Button x:Name="savePaths" DockPanel.Dock="Right" Content="保存位置" Style="{StaticResource Primary}" IsDefault="True"/><Button x:Name="cancelPaths" DockPanel.Dock="Right" Content="取消" Margin="0,0,9,0" IsCancel="True"/><Button x:Name="autoPaths" Content="恢复自动识别" HorizontalAlignment="Left"/></DockPanel></StackPanel>
+  <StackPanel Grid.Row="2"><TextBlock x:Name="pathError" Foreground="{StaticResource DangerInk}" FontSize="13" TextWrapping="Wrap" Margin="0,9,0,12"/><DockPanel><Button x:Name="savePaths" DockPanel.Dock="Right" Content="保存位置" Style="{StaticResource Primary}" IsDefault="True"/><Button x:Name="cancelPaths" DockPanel.Dock="Right" Content="取消" Margin="0,0,9,0" IsCancel="True"/><Button x:Name="autoPaths" Content="自动识别并应用" HorizontalAlignment="Left"/></DockPanel></StackPanel>
  </Grid></Border>
 </Window>
 '@
@@ -27,8 +27,7 @@
         $prefs=Get-PathPreferences
         $context.desktopPath.Text=$prefs.desktop_exe;$context.homePath.Text=$prefs.codex_home;$context.uiPath.Text=$prefs.ui_data_path
     }catch{$context.pathError.Text=$_.Exception.Message}
-    $desktop='未找到，请选择桌面程序';try{$desktop=Get-DesktopExe}catch{}
-    $context.resolvedPaths.Text="程序：$desktop`n聊天：$script:OfficialHome（$script:HomePathSource）`n界面：$script:OfficialUi（$script:UiPathSource）`n环境变量优先于手动选择；此处显示的是已生效位置。"
+    Update-EnvironmentPathsView $context
     if($env:CODEX_HOME){$context.homePath.IsEnabled=$false;$context.chooseHome.IsEnabled=$false}
     if($env:CODEX_ELECTRON_USER_DATA_PATH){$context.uiPath.IsEnabled=$false;$context.chooseUi.IsEnabled=$false}
     foreach($button in @($context.chooseDesktop,$context.chooseHome,$context.chooseUi)){
@@ -43,17 +42,33 @@
             }
         })
     }
-    $context.autoPaths.Add_Click({param($sender,$eventArgs)$ctx=([Windows.Window]::GetWindow($sender)).Tag;$ctx.desktopPath.Text='';$ctx.homePath.Text='';$ctx.uiPath.Text='';$ctx.pathError.Text='点击保存后恢复自动识别；已设置的环境变量仍优先。'})
+    $context.autoPaths.Add_Click({param($sender,$eventArgs)
+        $ctx=([Windows.Window]::GetWindow($sender)).Tag
+        try{
+            Invoke-ExclusiveSwitch {Use-AutomaticLauncherPaths}
+            $prefs=Get-PathPreferences;$ctx.desktopPath.Text=$prefs.desktop_exe;$ctx.homePath.Text=$prefs.codex_home;$ctx.uiPath.Text=$prefs.ui_data_path
+            $ctx.Saved=$true;Update-EnvironmentPathsView $ctx
+            $ctx.cancelPaths.Content='关闭'
+            $ctx.pathError.Foreground=$ctx.Window.FindResource('SuccessInk')
+            $ctx.pathError.Text='已应用，无需再点保存。保留正在使用的聊天与界面目录；环境变量仍优先。'
+            if(-not(Test-CodexHome $script:OfficialHome)){$ctx.pathError.Foreground=$ctx.Window.FindResource('MutedInk');$ctx.pathError.Text+=' 原聊天目录暂未找到；位置已保留，请接回磁盘或先打开官方 Codex。'}
+        }catch{$ctx.pathError.Foreground=$ctx.Window.FindResource('DangerInk');$ctx.pathError.Text=$_.Exception.Message}
+    })
     $context.cancelPaths.Add_Click({param($sender,$eventArgs)([Windows.Window]::GetWindow($sender)).Close()})
     $context.savePaths.Add_Click({param($sender,$eventArgs)
         $ctx=([Windows.Window]::GetWindow($sender)).Tag
         try{
             Invoke-ExclusiveSwitch {Save-PathPreferences $ctx.desktopPath.Text $ctx.homePath.Text $ctx.uiPath.Text}
             $ctx.Saved=$true;$ctx.Window.Close()
-        }catch{$ctx.pathError.Text=$_.Exception.Message}
+        }catch{$ctx.pathError.Foreground=$ctx.Window.FindResource('DangerInk');$ctx.pathError.Text=$_.Exception.Message}
     })
     $area=[Windows.SystemParameters]::WorkArea
     $window.Width=[Math]::Min($window.Width,$area.Width-32);$window.Height=[Math]::Min($window.Height,$area.Height-32)
     $window.MinWidth=[Math]::Min($window.MinWidth,$window.Width);$window.MinHeight=[Math]::Min($window.MinHeight,$window.Height)
     return $window
+}
+
+function Update-EnvironmentPathsView($Context) {
+    $desktop='未找到，请选择桌面程序';try{$desktop=Get-DesktopExe}catch{$desktop=$_.Exception.Message}
+    $Context.resolvedPaths.Text="程序：$desktop`n聊天：$script:OfficialHome（$script:HomePathSource）`n界面：$script:OfficialUi（$script:UiPathSource）`n自动识别不会移动或重建聊天；更换聊天目录请手动选择。"
 }

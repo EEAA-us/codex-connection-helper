@@ -193,32 +193,56 @@ function Assert-PathChangeClosed([string[]]$DesktopPaths=@()) {
     }
 }
 
+function Assert-PluginCheckPaths {
+    if($script:PathSettingsError){throw $script:PathSettingsError}
+    if(-not(Test-CodexHome $script:OfficialHome)){
+        throw '未找到原聊天与插件数据。请先打开官方 Codex 完成登录，或在环境设置选择原数据目录。检查不需要另选桌面界面目录。'
+    }
+}
+
+function Get-PreferenceDataPaths($Data) {
+    $homePath=Join-Path $env:USERPROFILE '.codex';$uiPath=Join-Path $env:APPDATA 'Codex'
+    if($Data.codex_home){$homePath=$Data.codex_home};if($Data.ui_data_path){$uiPath=$Data.ui_data_path}
+    if($env:CODEX_HOME){$homePath=Convert-LauncherPath $env:CODEX_HOME 'CODEX_HOME'}
+    if($env:CODEX_ELECTRON_USER_DATA_PATH){$uiPath=Convert-LauncherPath $env:CODEX_ELECTRON_USER_DATA_PATH 'CODEX_ELECTRON_USER_DATA_PATH'}
+    return [pscustomobject]@{home=$homePath;ui=$uiPath}
+}
+
+function Use-AutomaticLauncherPaths {
+    # Automatic installation discovery must not redirect a working custom data directory.
+    $defaultHome=Join-Path $env:USERPROFILE '.codex';$defaultUi=Join-Path $env:APPDATA 'Codex'
+    $homeChoice='';$uiChoice=''
+    if(-not $env:CODEX_HOME -and $script:OfficialHome -ine $defaultHome){$homeChoice=$script:OfficialHome}
+    if(-not $env:CODEX_ELECTRON_USER_DATA_PATH -and $script:OfficialUi -ine $defaultUi){$uiChoice=$script:OfficialUi}
+    Save-PathPreferences '' $homeChoice $uiChoice
+}
+
 function Save-PathPreferences([string]$DesktopExe,[string]$CodexHome,[string]$UiDataPath) {
     $data=[pscustomobject]@{version=1;desktop_exe='';codex_home='';ui_data_path=''}
     if($DesktopExe.Trim()){$data.desktop_exe=Assert-DesktopFile $DesktopExe}
     if($CodexHome.Trim()){
         $data.codex_home=Convert-LauncherPath $CodexHome '聊天数据目录'
-        if(-not(Test-CodexHome $data.codex_home)){throw '请选择含有 Codex 配置或聊天记录的原数据目录，不能选择空文件夹。'}
+        if($data.codex_home -ine $script:OfficialHome -and -not(Test-CodexHome $data.codex_home)){throw '请选择含有 Codex 配置或聊天记录的原数据目录，不能选择空文件夹。'}
     }
     if($UiDataPath.Trim()){
         $data.ui_data_path=Convert-LauncherPath $UiDataPath '界面数据目录'
         if($data.ui_data_path.Length -le 3){throw '界面数据目录不能选择整个磁盘根目录。'}
-        if(-not(Test-Path -LiteralPath $data.ui_data_path -PathType Container)){throw '请选择已存在的界面数据目录。'}
+        if($data.ui_data_path -ine $script:OfficialUi -and -not(Test-Path -LiteralPath $data.ui_data_path -PathType Container)){throw '请选择已存在的界面数据目录。'}
     }
     # Validate environment overrides too: they continue to take priority after saving.
-    if($env:CODEX_HOME -and -not(Test-CodexHome (Convert-LauncherPath $env:CODEX_HOME 'CODEX_HOME'))){throw 'CODEX_HOME 指向无效目录，请先修正该环境变量。'}
+    if($env:CODEX_HOME){$null=Convert-LauncherPath $env:CODEX_HOME 'CODEX_HOME'}
     if($env:CODEX_ELECTRON_USER_DATA_PATH){
         $envUi=Convert-LauncherPath $env:CODEX_ELECTRON_USER_DATA_PATH 'CODEX_ELECTRON_USER_DATA_PATH'
-        if($envUi.Length -le 3 -or -not(Test-Path -LiteralPath $envUi -PathType Container)){throw 'CODEX_ELECTRON_USER_DATA_PATH 须指向已存在的界面目录，不能是整盘。'}
+        if($envUi.Length -le 3){throw 'CODEX_ELECTRON_USER_DATA_PATH 不能是整盘。'}
     }
-    Assert-PathChangeClosed @($script:DesktopOverride,$data.desktop_exe)
+    $resolved=Get-PreferenceDataPaths $data
+    # Changing only discovery mode (or resaving the same paths) does not switch any data.
+    $dataChanged=$resolved.home -ine $script:OfficialHome -or $resolved.ui -ine $script:OfficialUi
+    if($dataChanged){Assert-PathChangeClosed @($script:DesktopOverride,$data.desktop_exe)}
     $statePath=Join-Path $script:LauncherData 'shared-switch.json'
     if(Test-Path -LiteralPath $statePath){
-        try{$state=Get-Content -LiteralPath $statePath -Raw -Encoding UTF8|ConvertFrom-Json}catch{throw '恢复备份无法读取，先处理原备份再修改位置。'}
-        $newHome=Join-Path $env:USERPROFILE '.codex'
-        if($data.codex_home){$newHome=$data.codex_home}
-        if($env:CODEX_HOME){$newHome=Convert-LauncherPath $env:CODEX_HOME 'CODEX_HOME'}
-        if($state.active -and $state.home -ne $newHome){
+        try{$state=Get-Content -LiteralPath $statePath -Raw -Encoding UTF8|ConvertFrom-Json}catch{if($dataChanged){throw '恢复备份无法读取，先恢复官方连接再更改数据目录。'};$state=$null}
+        if($state.active -and ($state.home -ine $resolved.home -or ($state.ui -and $state.ui -ine $resolved.ui))){
             throw '仍有未恢复的 API 切换。请先在原环境恢复官方，再更改位置；目录选错时仅允许改回备份所绑定的原目录。'
         }
     }

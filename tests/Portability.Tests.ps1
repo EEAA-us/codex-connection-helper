@@ -113,11 +113,24 @@ try{
     Expect-Failure {Assert-ResolvedDataPaths};Expect-Failure {Save-PathPreferences $manual $testHomePath $testUiPath}
     $env:CODEX_ELECTRON_USER_DATA_PATH=$null;Initialize-LauncherPaths
     $pathFile=Join-Path $script:LauncherData 'paths.json';$saved=[IO.File]::ReadAllText($pathFile)
+    $alternateHome=Join-Path $fixture '运行时不可切换的数据';New-Item -ItemType Directory -Path $alternateHome|Out-Null
+    Write-Atomic (Join-Path $alternateHome 'config.toml') 'model="synthetic-alternate"'
     $script:TestProcesses=@([pscustomobject]@{Name='codex.exe';ExecutablePath='synthetic'})
-    Expect-Failure {Save-PathPreferences '' '' ''}
+    Expect-Failure {Save-PathPreferences '' $alternateHome ''}
     if([IO.File]::ReadAllText($pathFile) -ne $saved){throw 'Running process changed path settings'}
+    Use-AutomaticLauncherPaths
+    if($script:OfficialHome -ne $testHomePath -or $script:OfficialUi -ne $testUiPath -or (Get-PathPreferences).desktop_exe){throw 'Automatic discovery changed data while running'}
     $script:TestProcesses=@([pscustomobject]@{Name='ChatGPT.exe';ExecutablePath=$manual})
-    Expect-Failure {Save-PathPreferences '' '' ''};$script:TestProcesses=@()
+    Expect-Failure {Save-PathPreferences '' $alternateHome ''};$script:TestProcesses=@()
+    $missingUi=Join-Path $fixture '未创建桌面界面目录';$script:OfficialUi=$missingUi
+    Assert-PluginCheckPaths
+    if(Test-Path -LiteralPath $missingUi){throw 'Read-only plugin preflight created an interface directory'}
+    Initialize-LauncherPaths
+    $env:CODEX_ELECTRON_USER_DATA_PATH=$missingUi;Initialize-LauncherPaths
+    Use-AutomaticLauncherPaths
+    if($script:OfficialUi -ne $missingUi -or (Test-Path -LiteralPath $missingUi)){throw 'Automatic discovery changed or created overridden missing UI directory'}
+    Assert-PluginCheckPaths
+    $env:CODEX_ELECTRON_USER_DATA_PATH=$null;Initialize-LauncherPaths
     $otherHome=Join-Path $fixture '环境变量目录';New-Item -ItemType Directory -Path $otherHome|Out-Null
     Write-Atomic (Join-Path $otherHome 'config.toml') 'model="synthetic-model"'
     $env:CODEX_HOME=$otherHome;Initialize-LauncherPaths
@@ -157,6 +170,7 @@ try{
     Restore-SharedOfficial
     if($UI){
         Add-Type -AssemblyName PresentationFramework,PresentationCore,WindowsBase,System.Xaml,System.Windows.Forms
+        . (Join-Path $source 'Launcher.Dialogs.ps1')
         . (Join-Path $source 'Environment.ps1')
         $window=New-EnvironmentWindow;$window.Show();$window.UpdateLayout()
         if($window.Tag.resolvedPaths.Text -notmatch [regex]::Escape($otherHome)){throw 'Resolved path UI mismatch'}
@@ -166,6 +180,14 @@ try{
         $window.Tag.homePath.Text=$otherHome
         $window.Tag.savePaths.RaiseEvent([Windows.RoutedEventArgs]::new([Windows.Controls.Button]::ClickEvent))
         if(-not $window.Tag.Saved -or $window.IsVisible){throw 'Path UI save failed'}
+        $beforeAutomaticHome=$script:OfficialHome;$beforeAutomaticUi=$script:OfficialUi
+        $window=New-EnvironmentWindow;$window.Show();$window.UpdateLayout()
+        $window.Tag.autoPaths.RaiseEvent([Windows.RoutedEventArgs]::new([Windows.Controls.Button]::ClickEvent))
+        if(-not $window.Tag.Saved -or -not $window.IsVisible -or $window.Tag.pathError.Text -notmatch '无需再点保存'){throw 'Automatic detection still requires a second save or closes without feedback'}
+        $window.Close();Initialize-LauncherPaths
+        $window=New-EnvironmentWindow;$window.Show();$window.UpdateLayout()
+        if($script:OfficialHome -ne $beforeAutomaticHome -or $script:OfficialUi -ne $beforeAutomaticUi -or $window.Tag.desktopPath.Text){throw 'Automatic settings did not persist across reopening or changed custom data'}
+        $window.Close()
     }
     'PASS: clean defaults; manifest/App Paths/uninstall/running installation discovery; CLI rejection and ambiguous fallback; D/Unicode/spaces, environment priority, recovery binding and repair.'
 }finally{

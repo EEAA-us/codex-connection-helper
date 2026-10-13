@@ -1,5 +1,6 @@
-﻿$ErrorActionPreference = 'Stop'
-$launcherFile = Join-Path $PSScriptRoot '打开启动器.vbs'
+﻿param([string]$DesktopDirectory='')
+$ErrorActionPreference = 'Stop'
+$launcherFile = Join-Path $PSScriptRoot 'Launch.exe'
 $bundledIcon = Join-Path $PSScriptRoot 'codex-star.ico'
 if (-not (Test-Path -LiteralPath $launcherFile) -or -not (Test-Path -LiteralPath $bundledIcon)) {
     throw '启动器或图标文件缺失，请保留完整的 Codex 启动器文件夹。'
@@ -14,13 +15,14 @@ Copy-Item -LiteralPath $bundledIcon -Destination $stableIcon -Force
 Add-Type -AssemblyName System.Drawing
 $iconCheck = [Drawing.Icon]::new($stableIcon)
 $iconCheck.Dispose()
-$desktopDir = [Environment]::GetFolderPath([Environment+SpecialFolder]::DesktopDirectory)
+$desktopDir = $DesktopDirectory
+if(-not $desktopDir){$desktopDir = [Environment]::GetFolderPath([Environment+SpecialFolder]::DesktopDirectory)}
 if (-not $desktopDir -or -not (Test-Path -LiteralPath $desktopDir)) { throw '未找到当前用户的桌面目录。' }
 $shortcutPath = Join-Path $desktopDir 'Codex 模式切换.lnk'
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($shortcutPath)
-$shortcut.TargetPath = Join-Path $env:SystemRoot 'System32\wscript.exe'
-$shortcut.Arguments = '"' + $launcherFile + '"'
+$shortcut.TargetPath = $launcherFile
+$shortcut.Arguments = ''
 $shortcut.WorkingDirectory = $PSScriptRoot
 $shortcut.IconLocation = $stableIcon + ',0'
 $shortcut.Description = '官方账号与第三方 API 切换，共用原来的本机记录'

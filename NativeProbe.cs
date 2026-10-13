@@ -64,8 +64,12 @@ public sealed class CodexNativeProbe : IDisposable {
             result["plugins"]=await Rpc("plugin/installed",new{cwds=new[]{cwd},installSuggestionPluginNames=new[]{"figma","design-partner"}}).ConfigureAwait(false);
             result["skills"]=await Rpc("skills/list",new{cwds=new[]{cwd},forceReload=true}).ConfigureAwait(false);
             if(connections) {
-                result["mcp"]=await Rpc("mcpServerStatus/list",new{detail="toolsAndAuthOnly",limit=100}).ConfigureAwait(false);
-                result["apps"]=await Rpc("app/installed",new{forceRefresh=false}).ConfigureAwait(false);
+                // An optional connection failure must not discard the inventory already read.
+                try {
+                    result["mcp"]=await Rpc("mcpServerStatus/list",new{detail="toolsAndAuthOnly",limit=100}).ConfigureAwait(false);
+                    result["apps"]=await Rpc("app/installed",new{forceRefresh=false}).ConfigureAwait(false);
+                } catch(TimeoutException) { result["connection_issue"]="timeout"; }
+                  catch(IOException) { result["connection_issue"]="engine_exit"; }
             }
             return Json().Serialize(result);
         }finally{Dispose();}

@@ -16,6 +16,12 @@ jobs:
           }
           [xml](Get-Content -LiteralPath UI.xaml -Raw -Encoding UTF8) | Out-Null
           [xml](Get-Content -LiteralPath Theme.xaml -Raw -Encoding UTF8) | Out-Null
+      - name: Build desktop executable entries
+        shell: powershell
+        run: .\Build-Desktop.ps1
+      - name: Check desktop install and preserving updates
+        shell: powershell
+        run: .\tests\Install.Tests.ps1
       - name: Run isolated portability checks
         shell: powershell
         run: .\tests\Portability.Tests.ps1

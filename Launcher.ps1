@@ -555,7 +555,7 @@ function Open-SettingsHelp($Target,[string]$Title,[string]$Detail){
     $helpCloseButton.Focus()|Out-Null
 }
 function Open-PluginSharingHelp($Target){
-    Open-SettingsHelp $Target '插件共享范围' "聊天和项目继续使用同一份本地数据。`n`n助手目前只自动共享：已安装并启用、只包含本地技能且允许复制（MIT 许可）的插件。副本显示为「原名称 · 本地共享」，官方模式可能同时显示原版和副本。`n`nFigma 等含账号服务连接的插件需单独核对安装与连接；复制文件不能转移账号授权。没有本地副本，不代表 API 模式一定不可用。`n`n安装、启用、技能发现和实际调用分别确认；清单读取成功不等于所有插件都能调用。"
+    Open-SettingsHelp $Target '插件共享范围' "聊天和项目继续使用同一份本地数据。`n`n助手目前只自动共享：已安装并启用、只包含本地技能且允许复制（MIT 许可）的插件。副本显示为「原名称 · 本地共享」，官方模式可能同时显示原版和副本。`n`nFigma 等含账号服务连接的插件需单独核对安装与连接；复制文件不能转移账号授权。没有本地副本，不代表 API 模式一定不可用。`n`n官方账号与 API 登录的插件市场可见范围可能不同，账号服务插件不保证显示完整；这不表示本地插件或聊天被删除，也不是靠重设环境位置就能补全。`n`n安装、启用、技能发现和实际调用分别确认；清单读取成功不等于所有插件都能调用。"
 }
 $form.FindName('homeSharingInfoButton').Add_Click({Open-PluginSharingHelp $form.FindName('homeSharingInfoButton')})
 $form.FindName('sharingInfoButton').Add_Click({Open-PluginSharingHelp $form.FindName('sharingInfoButton')})

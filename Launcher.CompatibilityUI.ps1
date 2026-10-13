@@ -29,6 +29,8 @@ function Finish-CompatibilityRequest {
         $compatibilityRepairPanel.Visibility='Collapsed';if($compatibilityRepairChoice.Items.Count){$compatibilityRepairPanel.Visibility='Visible';$compatibilityRepairChoice.SelectedIndex=0}
         if($report.plugins_status -ne 'pass' -or $report.skills_status -ne 'pass' -or $report.identity.native_auth_status -ne 'pass'){
             Show-ResultToast 'notice' '部分检查未完成' '已保留取得的结果；插件共享尚未确认，请查看明细。'
+        }elseif($report.mcp_status -ne 'pass' -or $report.apps_status -ne 'pass'){
+            Show-ResultToast 'notice' '插件清单已读取，部分连接未确认' '安装与技能结果已保留。账号连接检查未完成；无需因此修改环境位置，普通聊天可继续。'
         }else{Show-ResultToast 'notice' '插件清单已读取' '请查看安装、启用和技能发现结果；原生页面显示与实际调用仍需核对。'}
     }catch{$compatibilityDetail.Text=Get-CompatibilityFailureMessage $_;if($job.Probe.Stage){$compatibilityDetail.Text+=' 检查阶段：'+$job.Probe.Stage+'。'};$compatibilitySummary.Text='当前检查未完成；不能据此认定插件没有安装。展开明细查看原因。';$lastSharing=Get-LastPluginSharingSummary;if($lastSharing){$compatibilitySummary.Text=$lastSharing+"`r`n"+$compatibilitySummary.Text};Show-ResultToast 'error' '兼容检查未完成' $compatibilityDetail.Text}
     finally{$job.Probe.Dispose();$job.Worker.Dispose();$script:CompatibilityRequest=$null;$compatibilityCancel.Visibility='Collapsed';Set-Busy $false}
@@ -36,8 +38,8 @@ function Finish-CompatibilityRequest {
 function Start-CompatibilityRequest([switch]$Repair) {
     if($script:Busy){return};$probe=$null;$worker=$null
     try{
-        $cwd=$PSScriptRoot;if($compatibilityCwd.Text.Trim()){$cwd=Convert-LauncherPath $compatibilityCwd.Text '项目目录';if(-not(Test-Path -LiteralPath $cwd -PathType Container)){throw '项目目录不存在。'}}
-        if(-not(Test-CodexHome $script:OfficialHome) -or -not(Test-Path -LiteralPath $script:OfficialUi -PathType Container)){throw '请先在环境设置选择原 Codex 数据和界面目录；检查不会创建空白目录。'}
+        $cwd=$env:USERPROFILE;if($compatibilityCwd.Text.Trim()){$cwd=Convert-LauncherPath $compatibilityCwd.Text '项目目录';if(-not(Test-Path -LiteralPath $cwd -PathType Container)){throw '项目目录不存在。'}}
+        Assert-PluginCheckPaths
         $identity=Get-CompatibilityIdentity $cwd;$repairJson=''
         if($Repair){
             $plugin=$compatibilityRepairChoice.SelectedItem.Tag

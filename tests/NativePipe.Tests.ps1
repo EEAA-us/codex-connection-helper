@@ -26,6 +26,7 @@ public static class Utf8NativeFixture {
      if(method=="plugin/installed")result=new{marketplaces=new object[0],observedCwd=Convert.ToString(((object[])args["cwds"])[0])};
      if(method=="skills/list")result=new{data=new object[0],observedCwd=Convert.ToString(((object[])args["cwds"])[0])};
      if(method=="mcpServerStatus/list" || method=="app/installed") {
+      if(File.Exists("connection-timeout.flag"))System.Threading.Thread.Sleep(25000);
       if(File.Exists("plugins-only.flag"))return 3;
       result=method=="app/installed" ? (object)new{apps=new object[0]} : new{data=new object[0]};
      }
@@ -63,6 +64,14 @@ foreach($consoleEncoding in @($originalConsoleEncoding,[Text.UTF8Encoding]::new(
 $probe=[CodexNativeProbe]::new()
 try{$raw=$probe.RunPluginsAsync($engine,$fixture,$fixture,$project,'').GetAwaiter().GetResult()|ConvertFrom-Json}finally{$probe.Dispose()}
 if($raw.plugins.observedCwd -cne $project -or $raw.skills.observedCwd -cne $project -or $raw.PSObject.Properties['mcp'] -or $raw.PSObject.Properties['apps']){throw 'Plugin source query depended on optional connections'}
-$result=[ordered]@{status='pass';powershell=$PSVersionTable.PSVersion.ToString();fixture=$fixture;strictUtf8Decoder='pass';consoleUtf8BomAndNoBom='pass';callerEncodingPreserved='pass';unicodeCwd='pass';unicodeMarketplace='pass';queryAndInstall='pass';realNativeDesktop='unobserved'}
+$probe=[CodexNativeProbe]::new()
+try{$partial=$probe.RunAsync($engine,$fixture,$fixture,$project,'').GetAwaiter().GetResult()|ConvertFrom-Json}finally{$probe.Dispose()}
+if($partial.connection_issue -ne 'engine_exit' -or $partial.plugins.observedCwd -cne $project -or $partial.skills.observedCwd -cne $project){throw 'Optional connection failure discarded installed inventory'}
+[IO.File]::Delete((Join-Path $project 'plugins-only.flag'))
+[IO.File]::WriteAllText((Join-Path $project 'connection-timeout.flag'),'synthetic')
+$probe=[CodexNativeProbe]::new()
+try{$partial=$probe.RunAsync($engine,$fixture,$fixture,$project,'').GetAwaiter().GetResult()|ConvertFrom-Json}finally{$probe.Dispose()}
+if($partial.connection_issue -ne 'timeout' -or $partial.plugins.observedCwd -cne $project -or $partial.skills.observedCwd -cne $project){throw 'Optional connection timeout discarded installed inventory'}
+$result=[ordered]@{status='pass';powershell=$PSVersionTable.PSVersion.ToString();fixture=$fixture;strictUtf8Decoder='pass';consoleUtf8BomAndNoBom='pass';callerEncodingPreserved='pass';unicodeCwd='pass';unicodeMarketplace='pass';queryAndInstall='pass';optionalConnectionsPreserved='pass';realNativeDesktop='unobserved'}
 if($ReportPath){[IO.File]::WriteAllText([IO.Path]::GetFullPath($ReportPath),($result|ConvertTo-Json),[Text.UTF8Encoding]::new($false))}
-'PASS: UTF-8 native stdin without BOM; default/UTF-8 BOM/no-BOM consoles; caller encoding restored; exact Chinese/space cwd and marketplace roundtrip, query and install.'
+'PASS: UTF-8 native stdin without BOM; default/UTF-8 BOM/no-BOM consoles; caller encoding restored; exact Chinese/space cwd and marketplace roundtrip; optional connection exit/timeout keeps inventory.'

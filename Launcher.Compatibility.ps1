@@ -37,7 +37,7 @@ function Convert-CompatibilityReport($Raw,$Identity) {
         if($Raw.repair.query_status -in @('unobserved','blocked','fail')){$repairStatus=$Raw.repair.query_status}else{$repairStatus='pass'}
         if($Raw.repair.failure_kind -eq 'native_api_catalog_auth'){$failureKind='native_api_catalog_auth'}
     }
-    return [pscustomobject]@{version=2;identity=$Identity;repair_status=$repairStatus;repair_failure_kind=$failureKind;plugins_status=$(if($Raw.plugins -and $Raw.plugins.PSObject.Properties['marketplaces'] -and -not $marketErrors){'pass'}else{'unobserved'});skills_status=$(if($Raw.skills -and $Raw.skills.PSObject.Properties['data'] -and -not $skillErrors){'pass'}else{'unobserved'});mcp_status=$(if($Raw.mcp -and $Raw.mcp.PSObject.Properties['data'] -and -not $Raw.mcp.nextCursor){'pass'}else{'unobserved'});apps_status=$(if($Raw.apps -and $Raw.apps.PSObject.Properties['apps']){'pass'}else{'unobserved'});plugins=$plugins;skills=$skills;mcp=$mcp;apps=$apps}
+    return [pscustomobject]@{version=2;identity=$Identity;repair_status=$repairStatus;repair_failure_kind=$failureKind;plugins_status=$(if($Raw.plugins -and $Raw.plugins.PSObject.Properties['marketplaces'] -and -not $marketErrors){'pass'}else{'unobserved'});skills_status=$(if($Raw.skills -and $Raw.skills.PSObject.Properties['data'] -and -not $skillErrors){'pass'}else{'unobserved'});mcp_status=$(if($Raw.mcp -and $Raw.mcp.PSObject.Properties['data'] -and -not $Raw.mcp.nextCursor){'pass'}else{'unobserved'});apps_status=$(if($Raw.apps -and $Raw.apps.PSObject.Properties['apps']){'pass'}else{'unobserved'});plugins=$plugins;skills=$skills;mcp=$mcp;apps=$apps;connection_issue=([string]$Raw.connection_issue)}
 }
 function Test-PluginPresent($Plugin,$Report) {
     if(@($Report.plugins|Where-Object{$_.installed -and $_.id -eq $Plugin.id}).Count){return $true}
@@ -56,10 +56,11 @@ function Get-CompatibilityFindings($Report,$Previous=$null) {
         else{
             $lines+='两种模式使用相同本地目录；这不代表插件授权或调用成功。'
             if($Report.plugins_status -eq 'pass' -and $Previous.plugins_status -eq 'pass'){
-                foreach($p in @($Previous.plugins|Where-Object installed)){if(-not(Test-PluginPresent $p $Report)){$lines+='安装记录缺失：'+$p.name+'；上一模式已安装。账号管理插件请在官方插件页核对，本地插件可检查登记。'}}
+                foreach($p in @($Previous.plugins|Where-Object installed)){if(-not(Test-PluginPresent $p $Report)){$lines+='当前身份未返回：'+$p.name+'；上一模式已安装。未返回不代表文件被删除；账号管理插件请在官方插件页核对，本地插件可检查登记。'}}
             }
         }
     }else{$lines+='另一模式尚未检查：正常切换后点同一检查按钮，才能比较两种模式。'}
+    if($Report.connection_issue){$lines+='部分账号连接检查超时或引擎退出；已保留安装与技能清单，无需因此修改环境位置。'}
     $lines+='';$lines+='原生安装清单：'+$Report.plugins_status+'；技能发现：'+$Report.skills_status+'；MCP 清单：'+$Report.mcp_status
     foreach($p in @($Report.plugins)){
         $state='未安装';if($p.installed){$state='已安装'};if($p.installed -and -not $p.enabled){$state+=' · 已停用'}elseif($p.installed){$state+=' · 已启用'}
@@ -112,7 +113,7 @@ function Get-CompatibilitySummary($Report,$Previous=$null) {
     elseif($Report.identity.cwd -ine $Previous.identity.cwd){$lines+='项目范围不同，请选择同一项目再检查。'}
     elseif($Report.plugins_status -eq 'pass' -and $Previous.plugins_status -eq 'pass'){
         $missing=@($Previous.plugins|Where-Object{$_.installed -and -not(Test-PluginPresent $_ $Report)})
-        $lines+='本地目录一致；'+$missing.Count+' 个已安装插件未出现在本次安装清单。'
+        $lines+='本地目录一致；'+$missing.Count+' 个先前安装记录未出现在当前身份清单。这不表示文件删除；账号市场范围可能不同。'
     }else{$lines+='部分查询未观察，暂不能判断两种模式的安装差异。'}
     $differentSources=@($Report.plugins|Group-Object name|Where-Object{@($_.Group|Where-Object{$_.installed -and $_.source_type -eq 'remote'}).Count -and @($_.Group|Where-Object{$_.source_type -eq 'local' -and -not $_.installed}).Count})
     if($differentSources.Count){$lines+='有 '+$differentSources.Count+' 个插件存在账号版本与本地版本两份安装记录；具体来源见明细。'}

@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Windows.Forms;
 [assembly: AssemblyTitle("Codex Connection Helper")]
-[assembly: AssemblyVersion("0.3.18.0")]
+[assembly: AssemblyVersion("0.3.19.0")]
 internal static class DesktopEntry {
     [STAThread] static int Main(string[] args) {
         try {

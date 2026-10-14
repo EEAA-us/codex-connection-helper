@@ -21,7 +21,7 @@ jobs:
         run: .\Build-Desktop.ps1
       - name: Check desktop install and preserving updates
         shell: powershell
-        run: .\tests\Install.Tests.ps1
+        run: powershell.exe -NoProfile -STA -File .\tests\Install.Tests.ps1 -UI
       - name: Run isolated portability checks
         shell: powershell
         run: .\tests\Portability.Tests.ps1

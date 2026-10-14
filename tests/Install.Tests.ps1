@@ -1,4 +1,5 @@
-﻿$ErrorActionPreference='Stop'
+﻿param([switch]$UI,[string]$PreviewDirectory)
+$ErrorActionPreference='Stop'
 $source=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $fixture=Join-Path ([IO.Path]::GetTempPath()) ('Codex-install 中文 空格-'+[Guid]::NewGuid().ToString('N'))
 $before=@{}
@@ -8,6 +9,58 @@ try{
     $env:CODEX_HOME=$null;$env:CODEX_ELECTRON_USER_DATA_PATH=$null
     $seed=Join-Path $fixture '下载包';$target=Join-Path $env:LOCALAPPDATA 'Programs\CodexConnectionHelper';$desktop=Join-Path $fixture '桌面'
     & (Join-Path $source 'Prepare-Share.ps1') -Destination $seed|Out-Null
+    if($UI){
+        if([Threading.Thread]::CurrentThread.ApartmentState -ne 'STA'){throw 'Installer UI checks require PS5.1 -STA.'}
+        if($PreviewDirectory){$PreviewDirectory=[IO.Path]::GetFullPath($PreviewDirectory);New-Item -ItemType Directory -Path $PreviewDirectory -Force|Out-Null}
+        # Exercise the actual layout and event bindings, replacing only its blocking
+        # ShowDialog and the outer OS error box. No successful install is clicked.
+        $uiChecks=@'
+$window.Show();$window.UpdateLayout()
+function Check-SetupActions {
+    foreach($name in @('installNow','installCancel')){
+        $button=$window.FindName($name)
+        $bounds=$button.TransformToAncestor($window.Content).TransformBounds([Windows.Rect]::new(0,0,$button.ActualWidth,$button.ActualHeight))
+        if($bounds.Top -lt 0 -or $bounds.Left -lt 0 -or $bounds.Bottom -gt $window.Content.ActualHeight -or $bounds.Right -gt $window.Content.ActualWidth){throw ('Installer action outside viewport: '+$name)}
+    }
+}
+try{
+    Check-SetupActions
+    $entry=Join-Path $PSScriptRoot 'Launch.exe';$disabled=$entry+'.fixture-disabled'
+    Move-Item -LiteralPath $entry -Destination $disabled
+    try{
+        $window.FindName('installNow').RaiseEvent([Windows.RoutedEventArgs]::new([Windows.Controls.Button]::ClickEvent))
+        $window.UpdateLayout()
+        if(-not $window.IsVisible -or -not $window.Tag.Install.IsEnabled -or $window.Tag.Error.Text -notmatch 'Launch.exe'){throw 'Failed payload validation must leave setup open and retry available.'}
+        if(Test-Path -LiteralPath $window.Tag.Destination){throw 'Validation failure created installation files.'}
+    }finally{Move-Item -LiteralPath $disabled -Destination $entry}
+    $window.Width=550;$window.MaxHeight=390
+    $window.Tag.Error.Text=('无法更新文件：D:\某位用户\较长的程序安装目录\CodexConnectionHelper\Launcher.ps1。文件正在被使用，请关闭旧助手后再试。 '*8)
+    $window.UpdateLayout();$window.Dispatcher.Invoke([Action]{},[Windows.Threading.DispatcherPriority]::Background)
+    Check-SetupActions
+    $body=$window.FindName('installBody')
+    if(-not $body -or $body.ScrollableHeight -le 0){throw 'Long installation errors must remain scrollable.'}
+    $body.ScrollToBottom();$window.UpdateLayout()
+    if($body.VerticalOffset -le 0){throw 'Installation error cannot be scrolled into view.'}
+    if($PreviewDirectory){
+        $drawing=[Windows.Media.DrawingVisual]::new();$dc=$drawing.RenderOpen();$rect=[Windows.Rect]::new(0,0,$window.Content.ActualWidth,$window.Content.ActualHeight)
+        $brush=[Windows.Media.VisualBrush]::new($window.Content);$brush.ViewboxUnits=[Windows.Media.BrushMappingMode]::Absolute;$brush.Viewbox=$rect;$brush.Stretch=[Windows.Media.Stretch]::Fill
+        $dc.DrawRectangle($window.Background,$null,$rect);$dc.DrawRectangle($brush,$null,$rect);$dc.Close()
+        $bitmap=[Windows.Media.Imaging.RenderTargetBitmap]::new([int][Math]::Ceiling($rect.Width),[int][Math]::Ceiling($rect.Height),96,96,[Windows.Media.PixelFormats]::Pbgra32);$bitmap.Render($drawing)
+        $encoder=[Windows.Media.Imaging.PngBitmapEncoder]::new();$encoder.Frames.Add([Windows.Media.Imaging.BitmapFrame]::Create($bitmap))
+        $stream=[IO.File]::Create((Join-Path $PreviewDirectory 'setup-small-error.png'));try{$encoder.Save($stream)}finally{$stream.Dispose()}
+    }
+    $window.FindName('installCancel').RaiseEvent([Windows.RoutedEventArgs]::new([Windows.Controls.Button]::ClickEvent))
+    if($window.IsVisible){throw 'Setup cancel did not close its window.'}
+}finally{if($window.IsVisible){$window.Close()}}
+'@
+        $installer=[IO.File]::ReadAllText((Join-Path $seed 'Install.ps1'))
+        if(-not $installer.Contains('$null=$window.ShowDialog()')){throw 'Production installer UI entry changed; update the fixture.'}
+        $installer=$installer.Replace('$null=$window.ShowDialog()',$uiChecks).Replace("[Windows.Forms.MessageBox]::Show(`$_.Exception.Message,'安装未完成')|Out-Null;exit 1",'throw')
+        $uiScript=Join-Path $seed 'SetupFixture.Tests.ps1'
+        [IO.File]::WriteAllText($uiScript,$installer,[Text.UTF8Encoding]::new($true))
+        & $uiScript
+        'PASS: production installer actions remain visible with long errors in a small work area; failure permits retry; cancel closes.'
+    }
     New-Item -ItemType Directory -Path $desktop -Force|Out-Null
     . (Join-Path $source 'Install.ps1') -FunctionsOnly
     function Get-CimInstance {param($ClassName,$ErrorAction) return @()}

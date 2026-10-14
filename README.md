@@ -1,8 +1,8 @@
-# Codex 连接助手 · 0.3.18
+# Codex 连接助手 · 0.3.19
 
 轻量的 Windows 连接管理工具。配合官方 Codex 桌面版使用，在官方账号与多个兼容 API 之间切换，继续同一份本机聊天和项目。
 
-**当前为 Windows 测试版。** [下载 v0.3.18](https://github.com/EEAA-us/codex-connection-helper/releases/tag/v0.3.18) · [反馈问题](https://github.com/EEAA-us/codex-connection-helper/issues)。完整解压 ZIP，双击 **Setup.exe**，点 **安装并打开**。安装会创建桌面图标，以后双击 **Codex 模式切换** 即可打开，无需运行命令或打开终端。首次使用前，请先正常打开官方 Codex，完成登录及数据目录初始化。
+**当前为 Windows 测试版。** [下载 v0.3.19](https://github.com/EEAA-us/codex-connection-helper/releases/tag/v0.3.19) · [反馈问题](https://github.com/EEAA-us/codex-connection-helper/issues)。完整解压 ZIP，双击 **Setup.exe**，点 **安装并打开**。安装会创建桌面图标，以后双击 **Codex 模式切换** 即可打开，无需运行命令或打开终端。首次使用前，请先正常打开官方 Codex，完成登录及数据目录初始化。
 
 ## 安装与更新
 
